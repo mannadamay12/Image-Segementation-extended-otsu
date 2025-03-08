@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import os
 import math
+import logging  # Import the logging module
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class OptimizedExtendedOtsu:
     """
@@ -16,30 +18,17 @@ class OptimizedExtendedOtsu:
     
     def read_image(self, image_path):
         """Read a BMP image file."""
+        logging.info(f"Reading image from {image_path}")
         return np.array(Image.open(image_path))
     
     def rgb_to_grayscale(self, rgb_image):
-        """
-        Convert RGB image to grayscale using the formula:
-        I = Round(0.299R + 0.587G + 0.114B)
-        """
-        # Get image dimensions
-        height, width, _ = rgb_image.shape
-        
-        # Create empty grayscale image
-        grayscale = np.zeros((height, width), dtype=np.uint8)
-        
-        # Apply conversion formula manually
-        for i in range(height):
-            for j in range(width):
-                r, g, b = rgb_image[i, j]
-                gray_value = round(0.299 * r + 0.587 * g + 0.114 * b)
-                grayscale[i, j] = gray_value
-                
-        return grayscale
+        """Convert RGB image to grayscale using vectorized operations."""
+        logging.info("Converting image to grayscale")
+        return np.round(0.299 * rgb_image[:, :, 0] + 0.587 * rgb_image[:, :, 1] + 0.114 * rgb_image[:, :, 2]).astype(np.uint8)
     
     def compute_histogram(self, grayscale_image, bins=256):
         """Compute the histogram of the grayscale image."""
+        logging.info("Computing histogram")
         # Initialize histogram with zeros
         histogram = np.zeros(bins, dtype=np.int32)
         
@@ -156,48 +145,22 @@ class OptimizedExtendedOtsu:
                 best_thresholds = candidate.copy()
         
         return best_thresholds, best_variance
-    
     def _generate_threshold_candidates(self, thresholds, deviate, bins):
         """
         Generate candidate threshold combinations within a deviate range
         of current thresholds, ensuring they remain in ascending order.
         """
-        if not thresholds:
-            return [[]]
-        
-        # Base case: single threshold
-        if len(thresholds) == 1:
-            t = thresholds[0]
-            candidates = []
-            
-            for offset in range(-deviate, deviate + 1):
-                new_t = t + offset
-                if 0 <= new_t < bins:
-                    candidates.append([new_t])
-                    
-            return candidates
-        
-        # Recursive case: multiple thresholds
         candidates = []
-        t_head = thresholds[0]
-        t_tail = thresholds[1:]
-        
-        for offset in range(-deviate, deviate + 1):
-            new_t_head = t_head + offset
-            
-            if 0 <= new_t_head < bins - len(t_tail):
-                # Get candidates for remaining thresholds
-                tail_candidates = []
-                
-                for tail_candidate in self._generate_threshold_candidates(
-                    [t + offset for t in t_tail], 
-                    deviate, 
-                    bins
-                ):
-                    # Ensure thresholds remain in ascending order
-                    if not tail_candidate or new_t_head < tail_candidate[0]:
-                        candidates.append([new_t_head] + tail_candidate)
-        
+        def generate(current, remaining, prev_t):
+            if not remaining:
+                candidates.append(current[:])
+                return
+            t = remaining[0]
+            for dt in range(-deviate, deviate + 1):
+                new_t = t + dt
+                if 0 <= new_t < bins and (prev_t is None or new_t > prev_t):
+                    generate(current + [new_t], remaining[1:], new_t)
+        generate([], thresholds, None)
         return candidates
     
     def compute_multiple_thresholds(self, hist, n_regions):
@@ -205,6 +168,7 @@ class OptimizedExtendedOtsu:
         Compute optimal thresholds for segmenting an image into n_regions
         using the pyramid approach for efficiency.
         """
+        logging.info(f"Computing Otsu threshold for {n_regions} regions")
         if n_regions <= 1:
             return [], 0, []
         
@@ -294,6 +258,7 @@ class OptimizedExtendedOtsu:
         """
         Segment the image based on the thresholds.
         """
+        logging.info("Segmenting image")
         height, width = grayscale_image.shape
         segmented = np.zeros((height, width), dtype=np.uint8)
         
@@ -399,21 +364,28 @@ def main():
     processor = OptimizedExtendedOtsu()
     
     # List of test images (should be in the same directory)
-    test_images = ["tiger1.bmp", "data13.bmp", "basketballs.bmp"]
-    
-    # Process each image with 2, 3, and 4 regions
-    for image_path in test_images:
-        for n_regions in [2, 3, 4]:
-            grayscale, histogram, segmented, thresholds, total_variance, region_variances = \
-                processor.process_image(image_path, n_regions)
-            
-            # Visualize results
-            processor.visualize_results(
-                grayscale, histogram, segmented, thresholds, 
-                total_variance, region_variances, 
-                f"{image_path} - {n_regions} Regions"
-            )
-
+    test_images = ["tiger1.bmp"]
+    # test_images = ["tiger1.bmp", "data13.bmp", "basketballs.bmp"]
+    while True:
+        n_regions_input = input("Enter the number of regions (2, 3, or 4) or type 'exit' to quit: ")
+        if n_regions_input.lower() == 'exit':
+            break
+        try:
+            n_regions = int(n_regions_input)
+            if n_regions not in [2, 3, 4]:
+                raise ValueError
+        except ValueError:
+            logging.error("Invalid input. Please enter 2, 3, or 4.")
+            return
+        
+        # Process each image
+        for image_path in test_images:
+            result = processor.process_image(image_path, n_regions)
+            if result:
+                grayscale, histogram, segmented, thresholds, total_variance, region_variances = result
+                processor.visualize_results(grayscale, histogram, segmented, thresholds, 
+                                            total_variance, region_variances, 
+                                            f"{image_path} - {n_regions} Regions")
 
 if __name__ == "__main__":
     main()

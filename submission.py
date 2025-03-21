@@ -1,3 +1,5 @@
+# Adamay Mann - am14579
+# Anitej Srivastava - as19440
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image

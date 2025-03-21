@@ -179,7 +179,7 @@ class ExtendedOtsu:
 
 def main():
     processor = ExtendedOtsu()
-    test_images = ["tiger1.bmp"]
+    test_images = ["tiger1.bmp", "data13.bmp", "basketballs.bmp"]
     
     # Interactive input for N
     while True:
